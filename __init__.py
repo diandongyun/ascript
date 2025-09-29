@@ -102,6 +102,34 @@ class ScreenResolutionManager:
         return f"{width}x{height}"
 
 
+def get_resolution_folder():
+    try:
+        size = device.get_screen_size()
+        width, height = size[0], size[1]
+        return ScreenResolutionManager.format_resolution_folder_name(width, height)
+    except Exception:
+        return None
+
+
+def build_image_candidates(image_filename):
+    try:
+        img_root = R.res("img")
+        candidates = []
+        res_folder = get_resolution_folder()
+        if res_folder:
+            rel_path = os.path.join(res_folder, image_filename)
+            abs_path = os.path.join(img_root, rel_path)
+            if os.path.exists(abs_path):
+                candidates.append(R.img(rel_path))
+        # fallback to root
+        root_rel = image_filename
+        if os.path.exists(os.path.join(img_root, root_rel)):
+            candidates.append(R.img(root_rel))
+        return candidates if candidates else [R.img(image_filename)]
+    except Exception:
+        return [R.img(image_filename)]
+
+
 class ImageDownloader:
     def __init__(self):
         self.img_folder = R.res("img")
@@ -117,36 +145,10 @@ class ImageDownloader:
             width, height = self.resolution_manager.get_screen_resolution()
             if not width or not height:
                 return False
-            device_model = self.resolution_manager.get_device_model()
-            data = {
-                "type": "003",
-                "screen_width": width,
-                "screen_height": height,
-                "device_model": device_model,
-                "device_id": device.get_device_id()
-            }
-            response = requests.post(
-                API_URL,
-                json=data,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success"):
-                    return self.handle_image_response(result["data"])
-                else:
-                    error_message = result.get('message')
-                    if isinstance(error_message, dict) and error_message.get('error_code') == 'DEVICE_NOT_SUPPORTED':
-                        self.show_device_not_supported(error_message.get('support_message'))
-                        return False
-                    else:
-                        return False
-            else:
-                return False
-        except requests.exceptions.RequestException as e:
-            return False
-        except Exception as e:
+            folder = self.resolution_manager.format_resolution_folder_name(width, height)
+            local_dir = os.path.join(self.img_folder, folder)
+            return os.path.isdir(local_dir) and len(os.listdir(local_dir)) > 0
+        except Exception:
             return False
 
     def handle_image_response(self, data):
@@ -328,7 +330,7 @@ def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
     if ui_type == 'shouye':
         try:
             selected_results = FindImages(
-                [R.img("shouyeyixuanzhong.png")],
+                build_image_candidates("shouyeyixuanzhong.png"),
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -339,7 +341,7 @@ def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
             pass
         try:
             unselected_results = FindImages(
-                [R.img("shouyeweixuanzhong.png")],
+                build_image_candidates("shouyeweixuanzhong.png"),
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -356,7 +358,7 @@ def enhanced_local_detection(class_name, search_rect, confidence_threshold, max_
     for retry in range(max_retries):
         try:
             results = FindImages(
-                [R.img(image_filename)],
+                build_image_candidates(image_filename),
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -759,7 +761,7 @@ def tiktok_script(config=None):
             for i in range(3):
                 try:
                     selected_result = FindImages(
-                        [R.img("xuanzhong.png")],
+                        build_image_candidates("xuanzhong.png"),
                         confidence=0.85,
                         rect=search_rect,
                         mode=FindImages.M_MIX
@@ -1331,7 +1333,7 @@ def tiktok_script(config=None):
                         time.sleep(0.5)
                     else:
                         traditional_send_result = FindImages(
-                            [R.img("pinglunfasong.png")],
+                            build_image_candidates("pinglunfasong.png"),
                             confidence=0.5,
                             rect=send_search_rect,
                             mode=FindImages.M_MIX
@@ -1461,6 +1463,11 @@ def start_script_with_timer(platform, config):
     if platform not in script_functions:
         return False
     stop_current_script(platform)
+    # 清理停止标志，准备启动
+    try:
+        stop_event.clear()
+    except Exception:
+        pass
 
     def script_wrapper():
         try:
@@ -1473,21 +1480,40 @@ def start_script_with_timer(platform, config):
     script_thread = threading.Thread(target=script_wrapper, daemon=True)
     script_thread.start()
     running_scripts[platform] = script_thread
+    # 通知 UI 当前脚本启动
+    try:
+        if ui:
+            ui.call(f"handleScriptStart('{platform}')")
+    except Exception:
+        pass
 
     def timer_callback():
+        # 到达运行时间：停止当前并切换
         stop_current_script(platform)
-        if jump_to_platform and jump_to_platform in script_functions and not stop_event.is_set():
+        if jump_to_platform and jump_to_platform in script_functions:
+            try:
+                if ui:
+                    ui.call(f"handlePlatformSwitch('{platform}', '{jump_to_platform}')")
+            except Exception:
+                pass
             def start_next():
-                time.sleep(3)
-                if not stop_event.is_set():
-                    next_config = get_platform_config(jump_to_platform)
-                    if next_config:
-                        start_script_with_timer(jump_to_platform, next_config)
-                        if ui:
-                            ui.call(f"handleScriptStart('{jump_to_platform}')")
-
+                time.sleep(1)
+                try:
+                    stop_event.clear()
+                except Exception:
+                    pass
+                next_config = get_platform_config(jump_to_platform)
+                if next_config:
+                    start_script_with_timer(jump_to_platform, next_config)
             next_thread = threading.Thread(target=start_next, daemon=True)
             next_thread.start()
+        else:
+            # 无后续平台，通知 UI 停止
+            try:
+                if ui:
+                    ui.call("handleScriptStop()")
+            except Exception:
+                pass
 
     timer = threading.Timer(runtime_minutes * 60, timer_callback)
     timer.start()
