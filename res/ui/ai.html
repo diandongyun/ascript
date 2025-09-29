@@ -1,0 +1,956 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>千宿AI自动化</title>
+  <style>
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f0f0f0;
+      color: #333;
+      font-size: 1rem;
+    }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2vh 4vw;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      position: relative;
+      width: 100%;
+    }
+
+    .app-title {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #4fe138;
+      display: inline-block;
+      vertical-align: middle;
+      margin-bottom: 2vh;
+    }
+
+    .platform-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 2vh;
+    }
+
+    .platform-icon {
+      width: 60px;
+      height: 60px;
+      margin-right: 15px;
+    }
+
+    .robot-container {
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 1%;
+      width: 5vw;
+      height: 5vw;
+    }
+
+    .config-module {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 0.5rem;
+      padding: 3%;
+      margin: 3% 0;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .module-title {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-bottom: 1%;
+      text-align: left;
+      width: 100%;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1%;
+      width: 100%;
+    }
+
+    .input-group label {
+      width: 25%;
+      min-width: 5rem;
+      font-size: 1rem;
+      margin-right: 1%;
+      text-align: left;
+    }
+
+    .input-group input {
+      flex: 1;
+      padding: 1%;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 0.25rem;
+      box-sizing: border-box;
+    }
+
+    .input-group span {
+      margin-left: 1%;
+      font-size: 1rem;
+    }
+
+    .action-buttons {
+      text-align: center;
+      margin-top: 1.5vh;
+    }
+
+    .action-buttons button {
+      padding: 1vh 2vw;
+      margin: 0.5vh;
+      font-size: 0.875rem;
+      background-color: #4fe138;
+      color: #fff;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      width: 20%;
+      min-width: 6rem;
+    }
+
+    .tabs {
+      display: flex;
+      width: 100%;
+      overflow: hidden;
+      height: 5vh;
+      margin-bottom: 1vh;
+      gap: 0;
+      border-bottom: 0.125rem solid #4fe138;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 1vh 0;
+      margin: 0;
+      background-color: #f8f8f8;
+      border: none;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.3s;
+      position: relative;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .tab.active {
+      background-color: #fff;
+      color: #4fe138;
+      font-weight: bold;
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -0.125rem;
+      left: 0;
+      right: 0;
+      height: 0.125rem;
+      background: #4fe138;
+    }
+
+    .tab-content {
+      display: none;
+      width: 100%;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .modelViewPort {
+      perspective: 1000px;
+      width: 10vw;
+      max-width: 3.75rem;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+      overflow: hidden;
+    }
+
+    .eva {
+      --EVA-ROTATION-DURATION: 4s;
+      transform-style: preserve-3d;
+      animation: rotateRight var(--EVA-ROTATION-DURATION) linear infinite alternate;
+    }
+
+    .head {
+      position: relative;
+      width: 5vw;
+      height: 3vw;
+      border-radius: 48% 53% 45% 55% / 79% 79% 20% 22%;
+      background: linear-gradient(to right, white 45%, gray);
+    }
+
+    .eyeChamber {
+      width: 3.5vw;
+      height: 2.5vw;
+      position: relative;
+      left: 50%;
+      top: 55%;
+      border-radius: 45% 53% 45% 48% / 62% 59% 35% 34%;
+      background-color: #0c203c;
+      box-shadow: 0 0 0.0625rem 0.0625rem white, inset 0 0 0 0.0625rem black;
+      transform: translate(-50%, -50%);
+      animation: moveRight var(--EVA-ROTATION-DURATION) linear infinite alternate;
+    }
+
+    .eye {
+      width: 1vw;
+      height: 1.2vw;
+      position: absolute;
+      border-radius: 50%;
+    }
+
+    .eye:first-child {
+      left: 0.375rem;
+      top: 50%;
+      background: repeating-linear-gradient(
+        65deg,
+        #9bdaeb 0,
+        #9bdaeb 0.03125rem,
+        white 0.0625rem
+      );
+      box-shadow: inset 0 0 0.15625rem #04b8d5, 0 0 0.46875rem 0.03125rem #0bdaeb;
+      transform: translate(0, -50%) rotate(-65deg);
+    }
+
+    .eye:nth-child(2) {
+      right: 0.375rem;
+      top: 50%;
+      background: repeating-linear-gradient(
+        -65deg,
+        #9bdaeb 0,
+        #9bdaeb 0.03125rem,
+        white 0.0625rem
+      );
+      box-shadow: inset 0 0 0.15625rem #04b8d5, 0 0 0.46875rem 0.03125rem #0bdaeb;
+      transform: translate(0, -50%) rotate(65deg);
+    }
+
+    .body {
+      width: 1.875rem;
+      height: 2.5rem;
+      position: relative;
+      margin-block-start: 0.25rem;
+      border-radius: 47% 53% 45% 55% / 12% 9% 90% 88%;
+      background: linear-gradient(to right, white 35%, gray);
+    }
+
+    .hand {
+      position: absolute;
+      left: -0.75rem;
+      top: 0.375rem;
+      width: 1rem;
+      height: 2.75rem;
+      border-radius: 40%;
+      background: linear-gradient(to left, white 15%, gray);
+      box-shadow: 0.15625rem 0 0.15625rem rgba(0, 0, 0, 0.25);
+      transform: rotateY(55deg) rotateZ(10deg);
+    }
+
+    .hand:first-child {
+      animation: compensateRotation var(--EVA-ROTATION-DURATION) linear infinite alternate;
+    }
+
+    .hand:nth-child(2) {
+      left: 92%;
+      background: linear-gradient(to right, white 15%, gray);
+      transform: rotateY(55deg) rotateZ(-10deg);
+      animation: compensateRotationRight var(--EVA-ROTATION-DURATION) linear infinite alternate;
+    }
+
+    .scannerThing {
+      width: 0;
+      height: 0;
+      position: absolute;
+      left: 60%;
+      top: 10%;
+      border-top: 5.625rem solid #9bdaeb;
+      border-left: 7.8125rem solid transparent;
+      border-right: 7.8125rem solid transparent;
+      transform-origin: top left;
+      mask: linear-gradient(to right, white, transparent 35%);
+      animation: glow 2s cubic-bezier(0.86, 0, 0.07, 1) infinite;
+    }
+
+    .scannerOrigin {
+      position: absolute;
+      width: 0.25rem;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      left: 60%;
+      top: 10%;
+      background: #9bdaeb;
+      box-shadow: inset 0 0 0.15625rem rgba(0, 0, 0, 0.5);
+      animation: moveRight var(--EVA-ROTATION-DURATION) linear infinite;
+    }
+
+    @keyframes rotateRight {
+      from { transform: rotateY(0deg); }
+      to { transform: rotateY(25deg); }
+    }
+
+    @keyframes moveRight {
+      from { transform: translate(-50%, -50%); }
+      to { transform: translate(-40%, -50%); }
+    }
+
+    @keyframes compensateRotation {
+      from { transform: rotateY(55deg) rotateZ(10deg); }
+      to { transform: rotateY(30deg) rotateZ(10deg); }
+    }
+
+    @keyframes compensateRotationRight {
+      from { transform: rotateY(55deg) rotateZ(-10deg); }
+      to { transform: rotateY(70deg) rotateZ(-10deg); }
+    }
+
+    @keyframes glow {
+      from { opacity: 0; }
+      20% { opacity: 1; }
+      45% { transform: rotate(-25deg); }
+      75% { transform: rotate(5deg); }
+      100% { opacity: 0; }
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: white;
+      border: 0.0625rem solid #ccc;
+      box-shadow: 0 0.125rem 0.625rem rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      width: 80%;
+      max-width: 30rem;
+    }
+
+    .modal-content {
+      padding: 1.25rem;
+    }
+
+    .modal-content ul {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    .modal-content ul li {
+      padding: 0.625rem 0;
+      cursor: pointer;
+    }
+
+    .modal .close {
+      position: absolute;
+      right: 1.25rem;
+      cursor: pointer;
+    }
+
+    .input-group input[type="text"],
+    .input-group input[type="number"] {
+      width: 70%;
+      margin-left: 0.625rem;
+    }
+
+    .input-group input[type="number"] {
+      width: 60%;
+    }
+
+    .input-group input[type="number"]#runtime-tiktok,
+    .input-group input[type="number"]#runtime-facebook,
+    .input-group input[type="number"]#runtime-instagram,
+    .input-group input[type="number"]#runtime-x {
+      width: 40%;
+    }
+
+    /* 运行模式模块样式调整 */
+    .mode-module {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 0.5rem;
+      padding: 3%;
+      margin: 3% 0;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .mode-title {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-bottom: 1%;
+      text-align: left;
+      width: 100%;
+    }
+    .mode-switch-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+      gap: 1.5rem;
+    }
+    .mode-label {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #333;
+      user-select: none;
+    }
+    .mode-switch {
+      position: relative;
+      width: 48px;
+      height: 24px;
+      display: inline-block;
+    }
+    .mode-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .mode-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #4fe138 !important;
+      border-radius: 24px;
+      transition: .4s;
+    }
+    .mode-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 2px;
+      bottom: 2px;
+      background-color: #fff;
+      border-radius: 50%;
+      transition: .4s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .mode-switch input:checked + .mode-slider {
+      background-color: #4fe138 !important;
+    }
+    .mode-switch input:checked + .mode-slider:before {
+      transform: translateX(24px);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header>
+
+    </header>
+
+    <div class="platform-title">
+      <img id="platform-icon" class="platform-icon" src="../img/tiktok.png" alt="Platform Icon">
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="tiktok">tiktok</button>
+      <button class="tab" data-tab="facebook">facebook</button>
+      <button class="tab" data-tab="instagram">instagram</button>
+      <button class="tab" data-tab="x">x</button>
+    </div>
+
+    <!-- tiktok Tab 内容 -->
+    <div id="tiktok" class="tab-content active">
+      <div class="config-module">
+        <div class="module-title">正向提示词和负向提示词 (tiktok)</div>
+        <div class="input-group">
+          <label for="keywords-tiktok">正向提示词</label>
+          <input type="text" id="keywords-tiktok" placeholder="输入正向提示词">
+        </div>
+        <div class="input-group">
+          <label for="blacklist-tiktok">负向提示词</label>
+          <input type="text" id="blacklist-tiktok" placeholder="输入负向提示词">
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">点赞设置 (tiktok)</div>
+        <div class="input-group">
+          <label for="like-rate-tiktok">点赞概率</label>
+          <input type="number" id="like-rate-tiktok" placeholder="0-100">
+          <span>%</span>
+        </div>
+        <div class="input-group">
+          <label for="like-limit-tiktok">点赞上限</label>
+          <input type="number" id="like-limit-tiktok" placeholder="0-200">
+          <span>次</span>
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">运行时间 (tiktok)</div>
+        <div class="input-group">
+          <label for="runtime-tiktok">运行时间</label>
+          <input type="number" id="runtime-tiktok" placeholder="分钟">
+          <span>分钟后跳转至:</span>
+          <button id="jump-to-tiktok">选择平台</button>
+        </div>
+        <div id="selection-modal-tiktok" class="modal">
+          <div class="modal-content">
+            <span class="close">&times;</span>
+            <ul>
+              <li data-value="tiktok">tiktok</li>
+              <li data-value="facebook">facebook</li>
+              <li data-value="instagram">instagram</li>
+              <li data-value="x">x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-buttons">
+        <button id="start-tiktok">启动</button>
+        <button id="stop-tiktok">停止</button>
+      </div>
+    </div>
+
+    <!-- facebook Tab 内容 -->
+    <div id="facebook" class="tab-content">
+      <div class="config-module">
+        <div class="module-title">正向提示词和负向提示词 (facebook)</div>
+        <div class="input-group">
+          <label for="keywords-facebook">正向提示词</label>
+          <input type="text" id="keywords-facebook" placeholder="输入正向提示词">
+        </div>
+        <div class="input-group">
+          <label for="blacklist-facebook">负向提示词</label>
+          <input type="text" id="blacklist-facebook" placeholder="输入负向提示词">
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">点赞设置 (facebook)</div>
+        <div class="input-group">
+          <label for="like-rate-facebook">点赞概率</label>
+          <input type="number" id="like-rate-facebook" placeholder="0-100">
+          <span>%</span>
+        </div>
+        <div class="input-group">
+          <label for="like-limit-facebook">点赞上限</label>
+          <input type="number" id="like-limit-facebook" placeholder="0-200">
+          <span>次</span>
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">运行时间 (facebook)</div>
+        <div class="input-group">
+          <label for="runtime-facebook">运行时间</label>
+          <input type="number" id="runtime-facebook" placeholder="分钟">
+          <span>分钟后跳转至:</span>
+          <button id="jump-to-facebook">选择平台</button>
+        </div>
+        <div id="selection-modal-facebook" class="modal">
+          <div class="modal-content">
+            <span class="close">&times;</span>
+            <ul>
+              <li data-value="tiktok">tiktok</li>
+              <li data-value="facebook">facebook</li>
+              <li data-value="instagram">instagram</li>
+              <li data-value="x">x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-buttons">
+        <button id="start-facebook">启动</button>
+        <button id="stop-facebook">停止</button>
+      </div>
+    </div>
+
+    <!-- instagram Tab 内容 -->
+    <div id="instagram" class="tab-content">
+      <div class="config-module">
+        <div class="module-title">正向提示词和负向提示词 (instagram)</div>
+        <div class="input-group">
+          <label for="keywords-instagram">正向提示词</label>
+          <input type="text" id="keywords-instagram" placeholder="输入正向提示词">
+        </div>
+        <div class="input-group">
+          <label for="blacklist-instagram">负向提示词</label>
+          <input type="text" id="blacklist-instagram" placeholder="输入负向提示词">
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">点赞设置 (instagram)</div>
+        <div class="input-group">
+          <label for="like-rate-instagram">点赞概率</label>
+          <input type="number" id="like-rate-instagram" placeholder="0-100">
+          <span>%</span>
+        </div>
+        <div class="input-group">
+          <label for="like-limit-instagram">点赞上限</label>
+          <input type="number" id="like-limit-instagram" placeholder="0-200">
+          <span>次</span>
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">运行时间 (instagram)</div>
+        <div class="input-group">
+          <label for="runtime-instagram">运行时间</label>
+          <input type="number" id="runtime-instagram" placeholder="分钟">
+          <span>分钟后跳转至:</span>
+          <button id="jump-to-instagram">选择平台</button>
+        </div>
+        <div id="selection-modal-instagram" class="modal">
+          <div class="modal-content">
+            <span class="close">&times;</span>
+            <ul>
+              <li data-value="tiktok">tiktok</li>
+              <li data-value="facebook">facebook</li>
+              <li data-value="instagram">instagram</li>
+              <li data-value="x">x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-buttons">
+        <button id="start-instagram">启动</button>
+        <button id="stop-instagram">停止</button>
+      </div>
+    </div>
+
+    <!-- x Tab 内容 -->
+    <div id="x" class="tab-content">
+      <div class="config-module">
+        <div class="module-title">正向提示词和负向提示词 (x)</div>
+        <div class="input-group">
+          <label for="keywords-x">正向提示词</label>
+          <input type="text" id="keywords-x" placeholder="输入正向提示词">
+        </div>
+        <div class="input-group">
+          <label for="blacklist-x">负向提示词</label>
+          <input type="text" id="blacklist-x" placeholder="输入负向提示词">
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">点赞设置 (x)</div>
+        <div class="input-group">
+          <label for="like-rate-x">点赞概率</label>
+          <input type="number" id="like-rate-x" placeholder="0-100">
+          <span>%</span>
+        </div>
+        <div class="input-group">
+          <label for="like-limit-x">点赞上限</label>
+          <input type="number" id="like-limit-x" placeholder="0-200">
+          <span>次</span>
+        </div>
+      </div>
+
+      <div class="config-module">
+        <div class="module-title">运行时间 (x)</div>
+        <div class="input-group">
+          <label for="runtime-x">运行时间</label>
+          <input type="number" id="runtime-x" placeholder="分钟">
+          <span>分钟后跳转至:</span>
+          <button id="jump-to-x">选择平台</button>
+        </div>
+        <div id="selection-modal-x" class="modal">
+          <div class="modal-content">
+            <span class="close">&times;</span>
+            <ul>
+              <li data-value="tiktok">tiktok</li>
+              <li data-value="facebook">facebook</li>
+              <li data-value="instagram">instagram</li>
+              <li data-value="x">x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-buttons">
+        <button id="start-x">启动</button>
+        <button id="stop-x">停止</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+<script>
+   // 当前活动标签页
+   let currentTab = 'tiktok';
+   let runningScript = null;
+   
+   // 页面加载完成后通知Python
+   document.addEventListener('DOMContentLoaded', function() {
+     if (typeof ascript !== 'undefined') {
+       ascript.call('__onload__', '页面加载完成');
+       // 请求所有平台的配置数据
+       ascript.call('request_config', 'all');
+     }
+     
+     // 初始化标签页切换
+     initTabs();
+     
+     // 初始化所有按钮事件
+     initButtons();
+     
+     // 初始化模态框
+     initModals();
+     
+     // 初始化输入框变化事件
+     initInputEvents();
+     
+     // 初始化平台图标
+     updatePlatformIcon(currentTab);
+     
+     // 初始化音量键
+     initVolumeKeyListener();
+   });
+
+   // 初始化音量键监听
+   function initVolumeKeyListener() {
+     if (typeof ascript !== 'undefined') {
+       ascript.call('register_volume_key', '');
+     }
+   }
+
+   // 初始化输入框变化事件
+   function initInputEvents() {
+     document.querySelectorAll('input').forEach(input => {
+       input.addEventListener('change', function() {
+         saveCurrentTabConfig();
+       });
+     });
+   }
+
+   // 保存当前标签页的配置
+   function saveCurrentTabConfig() {
+     if (typeof ascript !== 'undefined') {
+       const config = getConfig(currentTab);
+       const jumpButton = document.getElementById(`jump-to-${currentTab}`);
+       config.jumpTo = jumpButton.textContent === '选择平台' ? '' : jumpButton.textContent;
+       
+       ascript.call('save_config', JSON.stringify({
+         platform: currentTab,
+         config: config
+       }));
+     }
+   }
+
+   // 更新平台图标
+   function updatePlatformIcon(platform) {
+     const platformIcon = document.getElementById('platform-icon');
+     if (platformIcon) {
+       platformIcon.src = `../img/${platform}.png`;
+       platformIcon.alt = `${platform} icon`;
+     }
+   }
+
+   // 标签页切换功能
+   function initTabs() {
+     const tabs = document.querySelectorAll('.tab');
+     tabs.forEach(tab => {
+       tab.addEventListener('click', function() {
+         saveCurrentTabConfig();
+         
+         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+         
+         this.classList.add('active');
+         const tabId = this.getAttribute('data-tab');
+         document.getElementById(tabId).classList.add('active');
+         
+         currentTab = tabId;
+         updatePlatformIcon(currentTab);
+         
+         if (typeof ascript !== 'undefined') {
+           ascript.call('request_config', tabId);
+         }
+       });
+     });
+   }
+
+   // 初始化所有按钮点击事件
+   function initButtons() {
+     ['tiktok', 'facebook', 'instagram', 'x'].forEach(platform => {
+       const startBtn = document.getElementById(`start-${platform}`);
+       const stopBtn = document.getElementById(`stop-${platform}`);
+       
+       // 启动按钮
+       startBtn.addEventListener('click', function() {
+         const config = getConfig(platform);
+         if (typeof ascript !== 'undefined') {
+           ascript.call(`start_script`, JSON.stringify({
+             platform: platform,
+             config: config
+           }));
+         }
+       });
+       
+       // 停止按钮 - 统一逻辑：停止所有并关闭界面
+       stopBtn.addEventListener('click', function() {
+         handleStopAll();
+       });
+     });
+   }
+
+   // 统一的停止处理函数
+   function handleStopAll() {
+     if (typeof ascript !== 'undefined') {
+       ascript.call('stop_all', '');
+     }
+   }
+
+   // 初始化模态框
+   function initModals() {
+     ['tiktok', 'facebook', 'instagram', 'x'].forEach(platform => {
+       const modal = document.getElementById(`selection-modal-${platform}`);
+       const jumpButton = document.getElementById(`jump-to-${platform}`);
+       
+       jumpButton.addEventListener('click', function() {
+         modal.style.display = 'block';
+       });
+       
+       modal.querySelector('.close').addEventListener('click', function() {
+         modal.style.display = 'none';
+       });
+       
+       modal.querySelectorAll('li').forEach(item => {
+         item.addEventListener('click', function() {
+           const value = this.getAttribute('data-value');
+           jumpButton.textContent = value;
+           saveCurrentTabConfig();
+           if (typeof ascript !== 'undefined') {
+             ascript.call(`jump_to_${platform}`, value);
+           }
+           modal.style.display = 'none';
+         });
+       });
+       
+       modal.addEventListener('click', function(e) {
+         if (e.target === modal) {
+           modal.style.display = 'none';
+         }
+       });
+     });
+   }
+
+   // 获取指定平台的配置
+   function getConfig(platform) {
+     return {
+       keywords: document.getElementById(`keywords-${platform}`).value,
+       blacklist: document.getElementById(`blacklist-${platform}`).value,
+       likeRate: document.getElementById(`like-rate-${platform}`).value,
+       likeLimit: document.getElementById(`like-limit-${platform}`).value,
+       runtime: document.getElementById(`runtime-${platform}`).value,
+       jumpTo: document.getElementById(`jump-to-${platform}`).textContent
+     };
+   }
+
+   // 提供给Python调用的函数 - 更新配置
+   function updateConfig(platform, config) {
+     document.getElementById(`keywords-${platform}`).value = config.keywords || '';
+     document.getElementById(`blacklist-${platform}`).value = config.blacklist || '';
+     document.getElementById(`like-rate-${platform}`).value = config.likeRate || '';
+     document.getElementById(`like-limit-${platform}`).value = config.likeLimit || '';
+     document.getElementById(`runtime-${platform}`).value = config.runtime || '';
+     
+     const jumpButton = document.getElementById(`jump-to-${platform}`);
+     if (config.jumpTo && config.jumpTo !== '选择平台') {
+       jumpButton.textContent = config.jumpTo;
+     } else {
+       jumpButton.textContent = '选择平台';
+     }
+   }
+   
+   // 提供给Python调用的函数 - 脚本启动成功
+   function handleScriptStart(platform) {
+     const startBtn = document.getElementById(`start-${platform}`);
+     const stopBtn = document.getElementById(`stop-${platform}`);
+     
+     startBtn.disabled = true;
+     stopBtn.disabled = false;
+     startBtn.classList.add('active');
+     stopBtn.classList.remove('active');
+     
+     // 其他平台按钮禁用
+     ['tiktok', 'facebook', 'instagram', 'x'].forEach(p => {
+       if (p !== platform) {
+         const otherStartBtn = document.getElementById(`start-${p}`);
+         const otherStopBtn = document.getElementById(`stop-${p}`);
+         otherStartBtn.disabled = true;
+         otherStopBtn.disabled = false;
+       }
+     });
+     
+     console.log(`${platform} 脚本已启动`);
+   }
+   
+   // 提供给Python调用的函数 - 脚本停止
+   function handleScriptStop() {
+     ['tiktok', 'facebook', 'instagram', 'x'].forEach(platform => {
+       const startBtn = document.getElementById(`start-${platform}`);
+       const stopBtn = document.getElementById(`stop-${platform}`);
+       
+       startBtn.disabled = false;
+       stopBtn.disabled = true;
+       startBtn.classList.remove('active');
+       stopBtn.classList.add('active');
+     });
+     
+     console.log('所有脚本已停止');
+   }
+
+   // 提供给Python调用的函数 - 平台切换通知
+   function handlePlatformSwitch(fromPlatform, toPlatform) {
+     console.log(`平台切换: ${fromPlatform} -> ${toPlatform}`);
+     
+     // 更新UI显示当前运行的平台
+     const platformIcon = document.getElementById('platform-icon');
+     if (platformIcon) {
+       platformIcon.src = `../img/${toPlatform}.png`;
+       platformIcon.alt = `${toPlatform} icon`;
+     }
+     
+     // 切换到对应的标签页
+     const targetTab = document.querySelector(`[data-tab="${toPlatform}"]`);
+     if (targetTab) {
+       targetTab.click();
+     }
+   }
+
+   // 提供给Python调用的函数 - 音量键被按下
+   function handleVolumeKeyPressed() {
+     handleStopAll();
+   }
+</script>
