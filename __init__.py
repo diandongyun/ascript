@@ -45,6 +45,66 @@ stop_event = threading.Event()
 script_timers = {}
 
 
+# ======================== 本地分辨率图片解析 ========================
+class LocalImageResolver:
+    _cached_resolution_folder = None
+
+    @staticmethod
+    def _get_resolution_folder():
+        try:
+            if LocalImageResolver._cached_resolution_folder:
+                return LocalImageResolver._cached_resolution_folder
+            size = device.get_screen_size()
+            width, height = size[0], size[1]
+            folder = f"{width}x{height}"
+            LocalImageResolver._cached_resolution_folder = folder
+            return folder
+        except Exception:
+            return None
+
+    @staticmethod
+    def _case_insensitive_find(directory, filename):
+        try:
+            if not os.path.isdir(directory):
+                return None
+            target = filename.lower()
+            for entry in os.listdir(directory):
+                if entry.lower() == target:
+                    return entry
+            return None
+        except Exception:
+            return None
+
+    @staticmethod
+    def get_img_path(filename):
+        try:
+            base_img_dir = R.res("img")
+            # 先尝试分辨率子目录
+            res_folder = LocalImageResolver._get_resolution_folder()
+            if res_folder:
+                res_dir = os.path.join(base_img_dir, res_folder)
+                # 先精确匹配
+                exact_path = os.path.join(res_dir, filename)
+                if os.path.exists(exact_path):
+                    return R.img(os.path.join(res_folder, filename))
+                # 大小写不敏感匹配
+                ci_name = LocalImageResolver._case_insensitive_find(res_dir, filename)
+                if ci_name:
+                    return R.img(os.path.join(res_folder, ci_name))
+
+            # 退回到根 img 目录
+            root_exact = os.path.join(base_img_dir, filename)
+            if os.path.exists(root_exact):
+                return R.img(filename)
+            ci_root = LocalImageResolver._case_insensitive_find(base_img_dir, filename)
+            if ci_root:
+                return R.img(ci_root)
+        except Exception:
+            pass
+        # 最终兜底仍返回 R.img 原路径，交给底层处理
+        return R.img(filename)
+
+
 def verify_registration(code, email=None):
     try:
         device_id = device.get_device_id()
@@ -113,40 +173,15 @@ class ImageDownloader:
             os.makedirs(self.img_folder)
 
     def request_images_by_resolution(self):
+        # 改为本地读取，始终返回 True（资源应已随包分发）
         try:
             width, height = self.resolution_manager.get_screen_resolution()
             if not width or not height:
                 return False
-            device_model = self.resolution_manager.get_device_model()
-            data = {
-                "type": "003",
-                "screen_width": width,
-                "screen_height": height,
-                "device_model": device_model,
-                "device_id": device.get_device_id()
-            }
-            response = requests.post(
-                API_URL,
-                json=data,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success"):
-                    return self.handle_image_response(result["data"])
-                else:
-                    error_message = result.get('message')
-                    if isinstance(error_message, dict) and error_message.get('error_code') == 'DEVICE_NOT_SUPPORTED':
-                        self.show_device_not_supported(error_message.get('support_message'))
-                        return False
-                    else:
-                        return False
-            else:
-                return False
-        except requests.exceptions.RequestException as e:
-            return False
-        except Exception as e:
+            # 检查对应分辨率子目录是否存在
+            res_dir = os.path.join(self.img_folder, f"{width}x{height}")
+            return os.path.isdir(res_dir)
+        except Exception:
             return False
 
     def handle_image_response(self, data):
@@ -327,8 +362,9 @@ def convert_to_standard_format(results, detection_method, needs_click=False):
 def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
     if ui_type == 'shouye':
         try:
+            # 先找“选中”标记图（本地资源为 xuanzhong.png/xuanzhong.PNG）
             selected_results = FindImages(
-                [R.img("shouyeyixuanzhong.png")],
+                [LocalImageResolver.get_img_path("xuanzhong.png")],
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -338,8 +374,9 @@ def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
         except Exception as e:
             pass
         try:
+            # 再找“首页”图标本体（本地资源为 shouye.png）
             unselected_results = FindImages(
-                [R.img("shouyeweixuanzhong.png")],
+                [LocalImageResolver.get_img_path("shouye.png")],
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -356,7 +393,7 @@ def enhanced_local_detection(class_name, search_rect, confidence_threshold, max_
     for retry in range(max_retries):
         try:
             results = FindImages(
-                [R.img(image_filename)],
+                [LocalImageResolver.get_img_path(image_filename)],
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -759,7 +796,7 @@ def tiktok_script(config=None):
             for i in range(3):
                 try:
                     selected_result = FindImages(
-                        [R.img("xuanzhong.png")],
+                        [LocalImageResolver.get_img_path("xuanzhong.png")],
                         confidence=0.85,
                         rect=search_rect,
                         mode=FindImages.M_MIX
@@ -1331,7 +1368,7 @@ def tiktok_script(config=None):
                         time.sleep(0.5)
                     else:
                         traditional_send_result = FindImages(
-                            [R.img("pinglunfasong.png")],
+                            [LocalImageResolver.get_img_path("pinglunfasong.png")],
                             confidence=0.5,
                             rect=send_search_rect,
                             mode=FindImages.M_MIX
@@ -1473,21 +1510,41 @@ def start_script_with_timer(platform, config):
     script_thread = threading.Thread(target=script_wrapper, daemon=True)
     script_thread.start()
     running_scripts[platform] = script_thread
+    # 通知 UI 当前脚本启动
+    try:
+        if ui:
+            ui.call(f"handleScriptStart('{platform}')")
+    except Exception:
+        pass
 
     def timer_callback():
+        # 停止当前脚本
         stop_current_script(platform)
-        if jump_to_platform and jump_to_platform in script_functions and not stop_event.is_set():
+        # 根据配置跳转到下一个平台
+        if jump_to_platform and jump_to_platform in script_functions:
+            try:
+                if ui:
+                    ui.call(f"handlePlatformSwitch('{platform}', '{jump_to_platform}')")
+            except Exception:
+                pass
+            # 清理停止标记并启动下一个脚本
+            stop_event.clear()
             def start_next():
-                time.sleep(3)
-                if not stop_event.is_set():
+                try:
                     next_config = get_platform_config(jump_to_platform)
                     if next_config:
                         start_script_with_timer(jump_to_platform, next_config)
-                        if ui:
-                            ui.call(f"handleScriptStart('{jump_to_platform}')")
-
+                except Exception:
+                    pass
             next_thread = threading.Thread(target=start_next, daemon=True)
             next_thread.start()
+        else:
+            # 未配置跳转平台，通知 UI 已停止
+            try:
+                if ui:
+                    ui.call("handleScriptStop()")
+            except Exception:
+                pass
 
     timer = threading.Timer(runtime_minutes * 60, timer_callback)
     timer.start()
