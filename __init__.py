@@ -43,6 +43,15 @@ ui = None
 running_scripts = {}
 stop_event = threading.Event()
 script_timers = {}
+IMG_RES_PREFIX = ""
+
+def _resolve_img_path(filename):
+    try:
+        if IMG_RES_PREFIX:
+            return R.img(os.path.join(IMG_RES_PREFIX, filename))
+        return R.img(filename)
+    except Exception:
+        return R.img(filename)
 
 
 def verify_registration(code, email=None):
@@ -114,40 +123,22 @@ class ImageDownloader:
 
     def request_images_by_resolution(self):
         try:
+            global IMG_RES_PREFIX
             width, height = self.resolution_manager.get_screen_resolution()
             if not width or not height:
-                return False
-            device_model = self.resolution_manager.get_device_model()
-            data = {
-                "type": "003",
-                "screen_width": width,
-                "screen_height": height,
-                "device_model": device_model,
-                "device_id": device.get_device_id()
-            }
-            response = requests.post(
-                API_URL,
-                json=data,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success"):
-                    return self.handle_image_response(result["data"])
-                else:
-                    error_message = result.get('message')
-                    if isinstance(error_message, dict) and error_message.get('error_code') == 'DEVICE_NOT_SUPPORTED':
-                        self.show_device_not_supported(error_message.get('support_message'))
-                        return False
-                    else:
-                        return False
-            else:
-                return False
-        except requests.exceptions.RequestException as e:
-            return False
-        except Exception as e:
-            return False
+                IMG_RES_PREFIX = ""
+                return True
+            folder_name = f"{width}x{height}"
+            candidate_dir = os.path.join(self.img_folder, folder_name)
+            if os.path.isdir(candidate_dir):
+                IMG_RES_PREFIX = folder_name
+                return True
+            # 若无对应分辨率目录，退回根目录图片
+            IMG_RES_PREFIX = ""
+            return True
+        except Exception:
+            IMG_RES_PREFIX = ""
+            return True
 
     def handle_image_response(self, data):
         try:
@@ -328,7 +319,7 @@ def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
     if ui_type == 'shouye':
         try:
             selected_results = FindImages(
-                [R.img("shouyeyixuanzhong.png")],
+                [_resolve_img_path("shouyeyixuanzhong.png")],
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -339,7 +330,7 @@ def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
             pass
         try:
             unselected_results = FindImages(
-                [R.img("shouyeweixuanzhong.png")],
+                [_resolve_img_path("shouyeweixuanzhong.png")],
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -356,7 +347,7 @@ def enhanced_local_detection(class_name, search_rect, confidence_threshold, max_
     for retry in range(max_retries):
         try:
             results = FindImages(
-                [R.img(image_filename)],
+                [_resolve_img_path(image_filename)],
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -759,7 +750,7 @@ def tiktok_script(config=None):
             for i in range(3):
                 try:
                     selected_result = FindImages(
-                        [R.img("xuanzhong.png")],
+                        [_resolve_img_path("xuanzhong.png")],
                         confidence=0.85,
                         rect=search_rect,
                         mode=FindImages.M_MIX
@@ -1331,7 +1322,7 @@ def tiktok_script(config=None):
                         time.sleep(0.5)
                     else:
                         traditional_send_result = FindImages(
-                            [R.img("pinglunfasong.png")],
+                            [_resolve_img_path("pinglunfasong.png")],
                             confidence=0.5,
                             rect=send_search_rect,
                             mode=FindImages.M_MIX
@@ -1448,8 +1439,11 @@ def x_script(config):
 
 def start_script_with_timer(platform, config):
     global script_timers, running_scripts
-    runtime_minutes = int(KeyValue.get(f"{platform}_runtime", "60"))
-    jump_to_platform = KeyValue.get(f"{platform}_jumpTo", "选择平台")
+    try:
+        runtime_minutes = int(config.get('runtime') or KeyValue.get(f"{platform}_runtime", "60"))
+    except Exception:
+        runtime_minutes = int(KeyValue.get(f"{platform}_runtime", "60"))
+    jump_to_platform = (config.get('jumpTo') if isinstance(config, dict) else None) or KeyValue.get(f"{platform}_jumpTo", "选择平台")
     if jump_to_platform == '选择平台' or not jump_to_platform:
         jump_to_platform = None
     script_functions = {
@@ -1461,6 +1455,9 @@ def start_script_with_timer(platform, config):
     if platform not in script_functions:
         return False
     stop_current_script(platform)
+
+    # 确保新的脚本启动前清理停止标志
+    stop_event.clear()
 
     def script_wrapper():
         try:
@@ -1475,19 +1472,26 @@ def start_script_with_timer(platform, config):
     running_scripts[platform] = script_thread
 
     def timer_callback():
+        from_platform = platform
         stop_current_script(platform)
-        if jump_to_platform and jump_to_platform in script_functions and not stop_event.is_set():
+        if jump_to_platform and jump_to_platform in script_functions:
             def start_next():
-                time.sleep(3)
-                if not stop_event.is_set():
-                    next_config = get_platform_config(jump_to_platform)
-                    if next_config:
-                        start_script_with_timer(jump_to_platform, next_config)
-                        if ui:
+                time.sleep(1)
+                stop_event.clear()
+                next_config = get_platform_config(jump_to_platform)
+                if next_config:
+                    start_script_with_timer(jump_to_platform, next_config)
+                    if ui:
+                        try:
+                            ui.call(f"handlePlatformSwitch('{from_platform}', '{jump_to_platform}')")
+                        except Exception:
+                            pass
+                        try:
                             ui.call(f"handleScriptStart('{jump_to_platform}')")
+                        except Exception:
+                            pass
 
-            next_thread = threading.Thread(target=start_next, daemon=True)
-            next_thread.start()
+            threading.Thread(target=start_next, daemon=True).start()
 
     timer = threading.Timer(runtime_minutes * 60, timer_callback)
     timer.start()
