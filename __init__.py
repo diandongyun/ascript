@@ -102,123 +102,61 @@ class ScreenResolutionManager:
         return f"{width}x{height}"
 
 
-class ImageDownloader:
+class LocalImageProvider:
     def __init__(self):
-        self.img_folder = R.res("img")
-        self.ensure_img_folder()
-        self.resolution_manager = ScreenResolutionManager()
+        self.root_img_dir = R.res("img")
 
-    def ensure_img_folder(self):
-        if not os.path.exists(self.img_folder):
-            os.makedirs(self.img_folder)
-
-    def request_images_by_resolution(self):
+    def _resolution_folder(self):
         try:
-            width, height = self.resolution_manager.get_screen_resolution()
-            if not width or not height:
-                return False
-            device_model = self.resolution_manager.get_device_model()
-            data = {
-                "type": "003",
-                "screen_width": width,
-                "screen_height": height,
-                "device_model": device_model,
-                "device_id": device.get_device_id()
-            }
-            response = requests.post(
-                API_URL,
-                json=data,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            )
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success"):
-                    return self.handle_image_response(result["data"])
-                else:
-                    error_message = result.get('message')
-                    if isinstance(error_message, dict) and error_message.get('error_code') == 'DEVICE_NOT_SUPPORTED':
-                        self.show_device_not_supported(error_message.get('support_message'))
-                        return False
-                    else:
-                        return False
-            else:
-                return False
-        except requests.exceptions.RequestException as e:
-            return False
-        except Exception as e:
-            return False
+            width, height = device.get_screen_size()
+            return f"{width}x{height}"
+        except Exception:
+            return None
 
-    def handle_image_response(self, data):
-        try:
-            resolution = data.get("resolution")
-            device_model = data.get("device_model")
-            image_count = data.get("image_count")
-            zip_base64 = data.get("zip_data")
-            image_names = data.get("image_names", [])
-            if not zip_base64:
-                return False
-            zip_data = base64.b64decode(zip_base64)
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_file:
-                temp_zip_path = temp_file.name
-                temp_file.write(zip_data)
-            return self.extract_images(temp_zip_path, image_names)
-        except Exception as e:
-            return False
+    def _candidate_relpaths(self, filename):
+        # 生成候选相对路径（相对 img 目录）
+        candidates = []
+        res_folder = self._resolution_folder()
+        base_name, ext = os.path.splitext(filename)
+        # 可能存在大小写不一致的扩展名
+        exts = [ext] if ext else []
+        if ".png".lower() not in [e.lower() for e in exts]:
+            exts.extend([".png", ".PNG"])
+        names = [filename]
+        # 也尝试将已知错误命名做纠正（如 pinglunfasong.png -> fasong.png）
+        if base_name == "pinglunfasong":
+            names.append("fasong.png")
+        # 组合候选
+        for name in names:
+            # 保持原样
+            if res_folder:
+                candidates.append(os.path.join(res_folder, name))
+            candidates.append(name)
+            # 尝试替换扩展名大小写
+            nbase, next_ext = os.path.splitext(name)
+            for e in exts:
+                if next_ext.lower() != e.lower():
+                    if res_folder:
+                        candidates.append(os.path.join(res_folder, nbase + e))
+                    candidates.append(nbase + e)
+        # 去重，保持顺序
+        dedup = []
+        seen = set()
+        for p in candidates:
+            if p not in seen:
+                seen.add(p)
+                dedup.append(p)
+        return dedup
 
-    def extract_images(self, zip_path, expected_images):
-        try:
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                file_list = zip_ref.namelist()
-                success_count = 0
-                for file_name in file_list:
-                    try:
-                        target_path = os.path.join(self.img_folder, file_name)
-                        if os.path.exists(target_path):
-                            try:
-                                os.remove(target_path)
-                            except Exception as e:
-                                pass
-                        zip_ref.extract(file_name, self.img_folder)
-                        extracted_path = os.path.join(self.img_folder, file_name)
-                        if os.path.exists(extracted_path):
-                            success_count += 1
-                    except Exception as e:
-                        pass
-                try:
-                    os.unlink(zip_path)
-                except:
-                    pass
-                return success_count > 0
-        except zipfile.BadZipFile:
-            return False
-        except Exception as e:
-            return False
-
-    def list_downloaded_images(self):
-        try:
-            img_files = os.listdir(self.img_folder)
-            image_files = [f for f in img_files if
-                           f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'))]
-            return image_files
-        except Exception as e:
-            return []
-
-    def show_device_not_supported(self, message):
-        try:
-            from ascript.ios.ui import WebWindow
-            from ascript.ios.system import R
-            def device_not_supported_handler(key, value):
-                if key == "__onload__":
-                    pass
-                elif key == "close":
-                    if hasattr(device_not_supported_handler, 'ui'):
-                        device_not_supported_handler.ui.close()
-            device_ui = WebWindow(R.ui("supported.html"), device_not_supported_handler)
-            device_not_supported_handler.ui = device_ui
-            device_ui.show()
-        except Exception as e:
-            pass
+    def resolve_many(self, filename):
+        # 返回存在的候选路径（转换为 R.img 可识别的相对路径）
+        results = []
+        for rel in self._candidate_relpaths(filename):
+            abs_path = os.path.join(self.root_img_dir, rel)
+            if os.path.exists(abs_path):
+                results.append(rel)
+        # 若都不存在，仍返回候选，交由底层自行处理
+        return results or self._candidate_relpaths(filename)
 
 
 class YOLODetectionHelper:
@@ -322,13 +260,28 @@ def convert_to_standard_format(results, detection_method, needs_click=False):
         }
         converted_results.append(converted_result)
     return converted_results
+def _build_img_resources(*filenames):
+    try:
+        provider = LocalImageProvider()
+        rels = []
+        seen = set()
+        for name in filenames:
+            for rel in provider.resolve_many(name):
+                if rel not in seen:
+                    seen.add(rel)
+                    rels.append(R.img(rel))
+        return rels
+    except Exception:
+        # 回退到直接使用传入的名称
+        return [R.img(name) for name in filenames]
+
 
 
 def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
     if ui_type == 'shouye':
         try:
             selected_results = FindImages(
-                [R.img("shouyeyixuanzhong.png")],
+                _build_img_resources("xuanzhong.png"),
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -339,7 +292,7 @@ def detect_special_ui_states(ui_type, search_rect, confidence_threshold):
             pass
         try:
             unselected_results = FindImages(
-                [R.img("shouyeweixuanzhong.png")],
+                _build_img_resources("shouye.png"),
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -356,7 +309,7 @@ def enhanced_local_detection(class_name, search_rect, confidence_threshold, max_
     for retry in range(max_retries):
         try:
             results = FindImages(
-                [R.img(image_filename)],
+                _build_img_resources(image_filename),
                 confidence=confidence_threshold,
                 rect=search_rect,
                 mode=FindImages.M_MIX
@@ -564,19 +517,14 @@ def calculate_expand_click_position(rect):
 
 
 def tiktok_script(config=None):
-    def download_resolution_images():
+    def ensure_local_images_ready():
         try:
-            downloader = ImageDownloader()
-            success = downloader.request_images_by_resolution()
-            if success:
-                downloader.list_downloaded_images()
-                return True
-            else:
-                return False
-        except Exception as e:
-            return False
-    download_success = download_resolution_images()
-    if not download_success:
+            # 仅检查本地 img 目录是否存在即可
+            img_dir = R.res("img")
+            return os.path.exists(img_dir)
+        except Exception:
+            return True
+    if not ensure_local_images_ready():
         return
     def step1():
         system.app_stop(bundle_id="com.zhiliaoapp.musically")
@@ -759,7 +707,7 @@ def tiktok_script(config=None):
             for i in range(3):
                 try:
                     selected_result = FindImages(
-                        [R.img("xuanzhong.png")],
+                        _build_img_resources("xuanzhong.png"),
                         confidence=0.85,
                         rect=search_rect,
                         mode=FindImages.M_MIX
@@ -1331,7 +1279,7 @@ def tiktok_script(config=None):
                         time.sleep(0.5)
                     else:
                         traditional_send_result = FindImages(
-                            [R.img("pinglunfasong.png")],
+                            _build_img_resources("pinglunfasong.png"),
                             confidence=0.5,
                             rect=send_search_rect,
                             mode=FindImages.M_MIX
@@ -1448,8 +1396,19 @@ def x_script(config):
 
 def start_script_with_timer(platform, config):
     global script_timers, running_scripts
-    runtime_minutes = int(KeyValue.get(f"{platform}_runtime", "60"))
-    jump_to_platform = KeyValue.get(f"{platform}_jumpTo", "选择平台")
+    # 优先使用 UI 传入的 config，其次读取 KeyValue
+    def _get_value(name, default):
+        v = None
+        try:
+            v = (config or {}).get(name)
+        except Exception:
+            v = None
+        if v in (None, ""):
+            v = KeyValue.get(f"{platform}_{name}", str(default))
+        return v
+
+    runtime_minutes = int(_get_value('runtime', 60))
+    jump_to_platform = _get_value('jumpTo', '选择平台')
     if jump_to_platform == '选择平台' or not jump_to_platform:
         jump_to_platform = None
     script_functions = {
@@ -1475,19 +1434,29 @@ def start_script_with_timer(platform, config):
     running_scripts[platform] = script_thread
 
     def timer_callback():
+        # 停止当前脚本
         stop_current_script(platform)
-        if jump_to_platform and jump_to_platform in script_functions and not stop_event.is_set():
+        # 切换到下一个平台
+        if jump_to_platform and jump_to_platform in script_functions:
             def start_next():
-                time.sleep(3)
-                if not stop_event.is_set():
-                    next_config = get_platform_config(jump_to_platform)
-                    if next_config:
-                        start_script_with_timer(jump_to_platform, next_config)
-                        if ui:
+                # 清理全局停止标记后再启动
+                stop_event.clear()
+                time.sleep(0.3)
+                next_config = get_platform_config(jump_to_platform)
+                if ui:
+                    try:
+                        ui.call(f"handlePlatformSwitch('{platform}', '{jump_to_platform}')")
+                    except Exception:
+                        pass
+                if next_config:
+                    start_script_with_timer(jump_to_platform, next_config)
+                    if ui:
+                        try:
                             ui.call(f"handleScriptStart('{jump_to_platform}')")
+                        except Exception:
+                            pass
 
-            next_thread = threading.Thread(target=start_next, daemon=True)
-            next_thread.start()
+            threading.Thread(target=start_next, daemon=True).start()
 
     timer = threading.Timer(runtime_minutes * 60, timer_callback)
     timer.start()
